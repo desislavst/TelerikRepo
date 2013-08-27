@@ -1,0 +1,181 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+
+namespace RiverRaid
+{
+    public struct Element // generic enough
+    {
+        public string width;
+        public int x;
+        public int y;
+        public ConsoleColor color;
+    }
+
+    class RiverRaid
+    {
+        static int currentRand = 0; // variable with the current state of the random number
+        static int nextRand = 0; // variable storing the next random number
+        const int ConsoleWidth = 50; // dimensions of console screen, can be changed; width
+        const int ConsoleHeight = 30; // height
+        static void PrintLand(int x, int y, string shape)
+        {
+            Console.SetCursorPosition(x, y);
+            Console.BackgroundColor = ConsoleColor.DarkGreen;
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.Write(shape);
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.BackgroundColor = ConsoleColor.DarkBlue;
+        }
+        static string LandGenerator(int row, int currentLength = 0)
+        {
+            int upperLimit = 16; // upper limit of randomization; the greatest width the land mass will be
+            int lowerLimit = 1; // lower limit of randomization; the minimum width of the land mass
+            Random randWidth = new Random();
+            int landWidth = randWidth.Next(lowerLimit, upperLimit);
+            if (currentRand == 0)
+            {
+                currentRand = landWidth;
+            }
+            if (nextRand == 0)
+            {
+                nextRand = randWidth.Next(lowerLimit, upperLimit);
+            }
+            if (currentLength != 0)
+            {
+                if (row % 10 == 9 || row % 10 == 1)
+                {
+                    if (nextRand > currentLength)
+                    {
+                        landWidth = currentLength + ((nextRand - currentLength) / 2);
+                    }
+                    else if (currentLength > nextRand)
+                    {
+                        landWidth = nextRand + ((currentLength - nextRand) / 2);
+                    }
+                    else // they're equal
+                    {
+                        landWidth = currentLength;
+                    }
+                }
+                else if (row % 10 == 0)
+                {
+                    landWidth = nextRand;
+                    currentRand = landWidth;
+                    nextRand = randWidth.Next(lowerLimit, upperLimit);
+                }
+                else // none of those cases
+                {
+                    landWidth = currentLength;
+                }
+            }
+            string land = new string(' ', landWidth);
+            return land;
+        }
+        static void Main()
+        {
+            Console.BackgroundColor = ConsoleColor.DarkBlue; // set default background color
+
+            Console.BufferHeight = Console.WindowHeight = ConsoleHeight; // set size of the console screen
+            Console.BufferWidth = Console.WindowWidth = ConsoleWidth;
+            List<Element> landmass = new List<Element>(); // creates the list containing the "shore"
+            Fighter airplaine = new Fighter(Console.WindowWidth / 2, Console.WindowHeight - 8);
+            int counter = 0; // count the steps for randomization purposes            
+            while (true)
+            {
+                counter++;
+                airplaine.Fuel--;
+                DrawScorefield();
+                if (counter == 2)//set one enemy every 10 cycles
+                {
+                    Enemies.GenerateRandomEnemy(); // generate the enemy cordinates ( a new enemy every cicle) 
+                }
+                Enemies.EnemyMoving();//enemy moving down to the console
+                Enemies.EnemyMovingLeftRight(); // enemy moving left, right, with random step
+     //!!       //I dont know why my enemies start moving right-left after one or two full cycles(10-20) 
+                int current = 0;
+                List<Element> newList = new List<Element>(); // new list for storing temporary objects
+                airplaine.MoveFighter();
+                for (int i = 0; i < landmass.Count; i++)
+                {
+                    Element oldEl = landmass[i];
+                    Element el = new Element();
+                    el.y = oldEl.y + 1;
+                    el.x = oldEl.x;
+                    el.width = oldEl.width;
+                    current = el.width.Length;
+                    // it doesn't work properly if I let the terrain reach the bottom of the screen
+                    //we can use the bottom space for system information - score, lives, fuel etc.
+                    if (el.y < ConsoleHeight - 5)
+                        newList.Add(el);
+                }
+                landmass = newList;
+                Console.Clear(); // very important
+                Element tempLand = new Element();
+                tempLand.x = 0;
+                tempLand.y = 0;
+                tempLand.width = LandGenerator(counter, current);
+                Element tempLandRight = tempLand; // mirror the right shore
+                tempLandRight.x = ConsoleWidth - tempLandRight.width.Length; // and place it accordingly
+                landmass.Add(tempLand);
+                landmass.Add(tempLandRight);
+                airplaine.DrawFighter();                
+                Enemies.DrawEnemies(); //printing the enemy on the  console
+                Console.ForegroundColor = ConsoleColor.White; // Set color for player information
+                PrintStringAtPos("Lives: ", 2, Console.WindowHeight - 4, airplaine.Lives.ToString());
+                PrintStringAtPos("Fuel: ", 2, Console.WindowHeight - 3, airplaine.Fuel.ToString());
+                PrintStringAtPos("Score: ", 2, Console.WindowHeight - 2, airplaine.Points.ToString());
+                
+                foreach (var element in landmass)
+                {
+                    PrintLand(element.x, element.y, element.width);
+                    ColisionWithWallsCheck(element, airplaine, landmass);
+                }
+                DrawScorefield();
+                Thread.Sleep(300 + airplaine.Speed); // controls game speed - lower is faster
+                if (counter == 10) // reset the counter when reaching 10 so it doesn't overflow at some point
+                {
+                    counter = 1;
+                }
+            }
+        }
+
+        public static void ColisionWithWallsCheck(Element el, Fighter airplaine, List<Element> listEl)
+        {
+            if ((airplaine.XCoord + 1 <= el.width.Length || airplaine.XCoord + 2 >= Console.WindowWidth - el.width.Length) &&
+                (airplaine.YCoord + 1 == el.y || airplaine.YCoord == el.y || airplaine.YCoord + 2 == el.y))
+            {
+                try
+                {
+                    airplaine.Lives--;
+                    airplaine.XCoord = Console.WindowWidth / 2 - 1;
+                    //                listEl.Clear();
+                    Console.Clear();
+
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    Console.SetCursorPosition(Console.WindowWidth / 2, Console.WindowHeight - 3);
+                    Console.WriteLine("GAME OVER!");
+                }
+                return;
+            }
+        }
+
+        public static void PrintStringAtPos(string text, int x, int y, string z)
+        {
+            Console.SetCursorPosition(x, y);
+            Console.WriteLine(text+ " "+ z);
+        }
+
+        static void DrawScorefield()
+        {
+            for (int i = 0; i < Console.WindowWidth; i++)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                PrintStringAtPos("\"", i, Console.WindowHeight -5, "");
+                Console.ForegroundColor = ConsoleColor.White;
+            }
+        }
+    }
+}
